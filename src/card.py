@@ -10,7 +10,7 @@ class Card(ft.GestureDetector):
     def __init__(self, solitaire, suite, rank):
         super().__init__()
         self.mouse_cursor = ft.MouseCursor.MOVE
-        self.drag_interval = 5
+        self.drag_interval = 30
         self.on_pan_start = self.start_drag
         self.on_pan_update = self.drag
         self.on_pan_end = self.drop
@@ -101,17 +101,17 @@ class Card(ft.GestureDetector):
     def start_drag(self, e: ft.DragStartEvent):
         if self.face_up:
             self.get_draggable_pile()
-            self.move_on_top()
+            # self.move_on_top()
+            for card in self.draggable_pile:
+                card.start_top = card.top
+                card.start_left = card.left
 
     def drag(self, e: ft.DragUpdateEvent):
         if self.face_up:
             for card in self.draggable_pile:
-                card.top = (
-                    max(0, self.top + e.local_delta.y)
-                    + self.draggable_pile.index(card) * CARD_OFFSET
-                )
-                card.left = max(0, self.left + e.local_delta.x)
-                self.solitaire.update()
+                card.top = max(0, card.top + e.local_delta.y)
+                card.left = max(0, card.left + e.local_delta.x)
+                card.update()
 
     def drop(self, e: ft.DragEndEvent):
         if self.face_up:
