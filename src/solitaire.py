@@ -141,6 +141,18 @@ class Solitaire(ft.Stack):
             card.move_on_top()
             card.place(self.stock)
 
+    def restart_game(self, e=None):
+        """restarts the game/board, shuffles the cards, resets timer, move counter, etc."""
+        self.controls.clear() # wipes visual elements
+        
+        # reconstruct the game data from scratch (new game)
+        self.create_card_deck()
+        self.create_slots()
+        self.deal_cards()
+        
+        # updates interface
+        self.update()
+    
     def check_win(self):
         cards_num = 0
         for slot in self.foundations:
