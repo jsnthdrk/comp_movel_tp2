@@ -26,6 +26,7 @@ class Solitaire(ft.Stack):
         self.controls = []
         self.width = SOLITAIRE_WIDTH
         self.height = SOLITAIRE_HEIGHT
+        self.history = [] # for the undo functionality, will function as a stack of moves to iterate from when undoing
 
     def did_mount(self):
         self.create_card_deck()
@@ -135,10 +136,16 @@ class Solitaire(ft.Stack):
             return card.rank.name == "King"
 
     def restart_stock(self):
+        cards_in_waste = self.waste.pile.copy()
+        self.history.append({
+            "action": "recycle_stock",
+            "cards": cards_in_waste
+        })
         while len(self.waste.pile) > 0:
             card = self.waste.get_top_card()
             card.turn_face_down()
             card.move_on_top()
+            card.draggable_pile = [card]
             card.place(self.stock)
 
     def restart_game(self, e=None):
@@ -146,11 +153,51 @@ class Solitaire(ft.Stack):
         self.controls.clear() # wipes visual elements
         
         # reconstruct the game data from scratch (new game)
+        self.history.clear()
         self.create_card_deck()
         self.create_slots()
         self.deal_cards()
         
         # updates interface
+        self.update()
+
+    def undo_move(self, e=None):
+        """undoes the last move, if last movement made any card turn face up, it'll be turned face down again.
+        if the move moved a card from slot A to slot B, it'll be moved back from slot B to slot A and so on"""
+        if len(self.history) == 0: # if there are no moves to undo, do nothing
+            print("No moves to undo") # debug
+            return
+        
+        last_move = self.history.pop()
+        action = last_move["action"]
+        print(f"Action: {action}") # debug
+        
+        if action == "flip": # if a card was flipped face up, flip it back face down
+            last_move["card"].turn_face_down()
+        
+        elif action == "move" or action == "move_to_foundation": # if a card was moved from a slot to another, let's move it back to the source slot
+            cards = last_move["cards"]
+            source_slot = last_move["source_slot"]
+            lead_card = cards[0]
+            lead_card.draggable_pile = cards
+            lead_card.move_on_top()
+            lead_card.place(source_slot)
+        
+        elif action == "move_stock_waste": # put the card back on the deck face down
+            card = last_move["card"]
+            source_slot = last_move["source_slot"]
+            card.turn_face_down()
+            card.draggable_pile = [card]
+            card.place(source_slot)
+        
+        elif action == "recycle_stock": # restarted deck, place back cards face up in waste
+            cards = last_move["cards"]
+            for card in reversed(cards): # reversed order to maintain stack integrity
+                card.turn_face_up()
+                card.move_on_top()
+                card.draggable_pile = [card]
+                card.place(self.waste)
+        
         self.update()
     
     def check_win(self):

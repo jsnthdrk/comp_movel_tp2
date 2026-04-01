@@ -121,6 +121,11 @@ class Card(ft.GestureDetector):
                     < DROP_PROXIMITY
                     and abs(self.left - slot.left) < DROP_PROXIMITY
                 ) and self.solitaire.check_tableau_rules(self, slot):
+                    self.solitaire.history.append({
+                        "action": "move",
+                        "cards": self.draggable_pile.copy(),
+                        "source_slot": self.slot
+                    })
                     self.place(slot)
                     return
 
@@ -130,6 +135,11 @@ class Card(ft.GestureDetector):
                         abs(self.top - slot.top) < DROP_PROXIMITY
                         and abs(self.left - slot.left) < DROP_PROXIMITY
                     ) and self.solitaire.check_foundations_rules(self, slot):
+                        self.solitaire.history.append({
+                        "action": "move",
+                        "cards": self.draggable_pile.copy(),
+                        "source_slot": self.slot
+                        })
                         self.place(slot)
                         return
 
@@ -139,9 +149,18 @@ class Card(ft.GestureDetector):
         self.get_draggable_pile()
         if self.slot in self.solitaire.tableau:
             if not self.face_up and len(self.draggable_pile) == 1:
+                self.solitaire.history.append({
+                    "action": "flip",
+                    "card": self
+                })
                 self.turn_face_up()
         elif self.slot == self.solitaire.stock:
             self.move_on_top()
+            self.solitaire.history.append({
+                    "action": "move_stock_waste",
+                    "card": self,
+                    "source_slot": self.solitaire.stock
+                })
             self.place(self.solitaire.waste)
             self.turn_face_up()
 
@@ -151,5 +170,10 @@ class Card(ft.GestureDetector):
             self.move_on_top()
             for slot in self.solitaire.foundations:
                 if self.solitaire.check_foundations_rules(self, slot):
+                    self.solitaire.history.append({
+                        "action": "move_to_foundation",
+                        "cards": self.draggable_pile.copy(),
+                        "source_slot": self.slot
+                    })
                     self.place(slot)
                     return

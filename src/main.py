@@ -10,10 +10,16 @@ def main(page: ft.Page):
     restart_button = ft.Button(
         content=ft.Text("Restart Game"),
         icon=ft.Icons.RESTART_ALT,
-        on_click=solitaire.restart_game
+        on_click=solitaire.restart_game,
+    )
+    
+    undo_button = ft.Button(
+        content=ft.Text("Undo Move"),
+        icon=ft.Icons.UNDO,
+        on_click=solitaire.undo_move
     )
 
-    page.add(solitaire, restart_button)
+    page.add(ft.Row([restart_button, undo_button]), solitaire)
 
 
 ft.run(main, assets_dir="assets")
