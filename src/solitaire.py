@@ -4,8 +4,9 @@ SOLITAIRE_HEIGHT = 500
 import random
 
 import flet as ft
-from card import Card
+from card import Card, CARD_OFFSET
 from slot import Slot
+import json
 
 
 class Suite:
@@ -219,3 +220,103 @@ class Solitaire(ft.Stack):
         self.controls.append(
             ft.AlertDialog(title=ft.Text("Congratulations! You won!"), open=True)
         )
+    
+    async def save_game(self, e=None):
+        """saves the game state to client's storage (browser), so that it can be loaded later at any time,
+        offers a dropdown menu to choose from save slots, and to either delete the save or load it"""
+        
+        save_data = {}
+        for card in self.cards:
+            card_id = f"{card.rank.name}_{card.suite.name}"
+            
+            if card.slot == self.stock: slot_name = "stock"
+            elif card.slot == self.waste: slot_name = "waste"
+            elif card.slot in self.foundations: slot_name = f"foundation_{self.foundations.index(card.slot)}"
+            elif card.slot in self.tableau: slot_name = f"tableau_{self.tableau.index(card.slot)}"
+            else: continue
+            
+            save_data[card_id] = {
+                "slot": slot_name,
+                "face_up": card.face_up,
+                "pile_index": card.slot.pile.index(card)
+            }
+            
+        # save_id = 0000
+        save_string = json.dumps(save_data)
+        # await ft.SharedPreferences().set(f"solitaire_save_{save_id+1}", save_string) -> later
+        # print(f"Game saved with id: {save_id+1}") # debug
+        await ft.SharedPreferences().set("solitaire_save", save_string)
+        print(f"Game saved!") # debug
+                
+    async def load_game(self, e=None):
+        """loads a previously saved game state from client's storage, reloads the game state using the values from the save,
+        if no save is found, does nothing"""
+        save_string = await ft.SharedPreferences().get(f"solitaire_save")
+        
+        if not save_string:
+            print("No save data found")
+            return
+
+        save_data = json.loads(save_string)
+        
+        self.clear_game_state()
+        
+        # remove cards from GUI so we can "draw" them again in the correct order that they were saved
+        self.controls = [c for c in self.controls if c not in self.cards]
+
+        # creates a simple data structure so we can order the cards before loading
+        slots_data = {"stock": [], "waste": []}
+        for i in range(4): slots_data[f"foundation_{i}"] = []
+        for i in range(7): slots_data[f"tableau_{i}"] = []
+
+        # group cards by their target slot
+        for card in self.cards:
+            card_id = f"{card.rank.name}_{card.suite.name}"
+            if card_id in save_data:
+                state = save_data[card_id]
+                slots_data[state["slot"]].append((state["pile_index"], card, state["face_up"]))
+
+        # reconstruct the game state in the correct order for each slot
+        for slot_name, card_tuples in slots_data.items():
+            # sorts the cards by their pile index to maintain data integrity
+            card_tuples.sort(key=lambda x: x[0])
+            
+            # find the target slot object based on slot name
+            if slot_name == "stock": target_slot = self.stock
+            elif slot_name == "waste": target_slot = self.waste
+            elif slot_name.startswith("foundation_"): 
+                target_slot = self.foundations[int(slot_name.split("_")[1])]
+            elif slot_name.startswith("tableau_"):
+                target_slot = self.tableau[int(slot_name.split("_")[1])]
+
+            # places card
+            for _, card, face_up in card_tuples:
+                if face_up:
+                    card.turn_face_up()
+                else:
+                    card.turn_face_down()
+                
+                card.slot = target_slot
+                target_slot.pile.append(card)
+                
+                # screen coords calculations
+                if target_slot in self.tableau:
+                    card.top = target_slot.top + target_slot.pile.index(card) * CARD_OFFSET
+                else:
+                    card.top = target_slot.top
+                card.left = target_slot.left
+                
+                # finally, add cards to the GUI
+                self.controls.append(card)
+
+        self.update()
+        print("Game loaded successfully!")
+    
+    def clear_game_state(self, e=None):
+        """clears the game state by emptying all appropriate game data"""
+        self.stock.pile.clear()
+        self.waste.pile.clear()
+        for slot in self.foundations: slot.pile.clear()
+        for slot in self.tableau: slot.pile.clear()
+        self.history.clear()
+  

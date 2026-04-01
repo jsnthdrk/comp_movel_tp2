@@ -18,8 +18,20 @@ def main(page: ft.Page):
         icon=ft.Icons.UNDO,
         on_click=solitaire.undo_move
     )
+    
+    save_button = ft.Button(
+        content=ft.Text("Save Game"),
+        icon=ft.Icons.SAVE,
+        on_click=solitaire.save_game
+    )
+    
+    load_button = ft.Button(
+        content=ft.Text("Load Game"),
+        icon=ft.Icons.CLOUD_UPLOAD,
+        on_click=solitaire.load_game
+    )
 
-    page.add(ft.Row([restart_button, undo_button]), solitaire)
+    page.add(ft.Row([restart_button, undo_button, save_button, load_button]), solitaire)
 
 
 ft.run(main, assets_dir="assets")
