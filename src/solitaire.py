@@ -94,7 +94,7 @@ class Solitaire(ft.Stack):
 
         # deal to tableau
         first_slot = 0
-        remaining_cards = self.cards
+        remaining_cards = self.cards.copy()
 
         while first_slot < len(self.tableau):
             for slot in self.tableau[first_slot:]:
