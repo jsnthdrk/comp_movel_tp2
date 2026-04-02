@@ -8,7 +8,7 @@ CARD_OFFSET = 20
 
 class Card(ft.GestureDetector):
     def __init__(self, solitaire, suite, rank):
-        super().__init__()
+        super().__init__(key=f"{suite.name}_{rank.name}")
         self.mouse_cursor = ft.MouseCursor.MOVE
         self.drag_interval = 30
         self.on_pan_start = self.start_drag
@@ -53,6 +53,7 @@ class Card(ft.GestureDetector):
 
     def bounce_back(self):
         """Returns draggable pile to its original position"""
+        self.move_on_top()
         for card in self.draggable_pile:
             if card.slot in self.solitaire.tableau:
                 card.top = card.slot.top + card.slot.pile.index(card) * CARD_OFFSET
@@ -63,7 +64,7 @@ class Card(ft.GestureDetector):
 
     def place(self, slot):
         """Place draggable pile to the slot"""
-
+        self.move_on_top()      
         for card in self.draggable_pile:
             if slot in self.solitaire.tableau:
                 card.top = slot.top + len(slot.pile) * CARD_OFFSET
@@ -101,7 +102,6 @@ class Card(ft.GestureDetector):
     def start_drag(self, e: ft.DragStartEvent):
         if self.face_up:
             self.get_draggable_pile()
-            # self.move_on_top()
             for card in self.draggable_pile:
                 card.start_top = card.top
                 card.start_left = card.left
@@ -147,6 +147,7 @@ class Card(ft.GestureDetector):
 
     def click(self, e):
         self.get_draggable_pile()
+        self.move_on_top()
         if self.slot in self.solitaire.tableau:
             if not self.face_up and len(self.draggable_pile) == 1:
                 self.solitaire.history.append({
