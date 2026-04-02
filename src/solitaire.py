@@ -7,6 +7,7 @@ import flet as ft
 from card import Card, CARD_OFFSET
 from slot import Slot
 import json
+import datetime
 
 
 class Suite:
@@ -241,17 +242,29 @@ class Solitaire(ft.Stack):
                 "pile_index": card.slot.pile.index(card)
             }
             
-        # save_id = 0000
         save_string = json.dumps(save_data)
-        # await ft.SharedPreferences().set(f"solitaire_save_{save_id+1}", save_string) -> later
-        # print(f"Game saved with id: {save_id+1}") # debug
-        await ft.SharedPreferences().set("solitaire_save", save_string)
-        print(f"Game saved!") # debug
+        prefs = ft.SharedPreferences()
+        
+        keys = await prefs.get_keys("solitaire_save_")
+        
+        if keys:
+            # extract the ID part (e.g., '0000' from 'solitaire_save_0000_2026_04_02')
+            ids = [int(k.split("_")[2]) for k in keys if len(k.split("_")) >= 3 and k.split("_")[2].isdigit()]
+            next_id = max(ids) + 1 if ids else 0
+        else:
+            next_id = 0
+            
+        date_str = datetime.datetime.now().strftime("%Y_%m_%d")
+        save_name = f"solitaire_save_{next_id:04d}_{date_str}"
+        
+        await prefs.set(save_name, save_string)
+        print(f"Game saved as: {save_name}")
                 
-    async def load_game(self, e=None):
+    async def load_game(self, save_name):
         """loads a previously saved game state from client's storage, reloads the game state using the values from the save,
         if no save is found, does nothing"""
-        save_string = await ft.SharedPreferences().get(f"solitaire_save")
+        prefs = ft.SharedPreferences()
+        save_string = await prefs.get(save_name)
         
         if not save_string:
             print("No save data found")
@@ -260,28 +273,21 @@ class Solitaire(ft.Stack):
         save_data = json.loads(save_string)
         
         self.clear_game_state()
-        
-        # remove cards from GUI so we can "draw" them again in the correct order that they were saved
         self.controls = [c for c in self.controls if c not in self.cards]
 
-        # creates a simple data structure so we can order the cards before loading
         slots_data = {"stock": [], "waste": []}
         for i in range(4): slots_data[f"foundation_{i}"] = []
         for i in range(7): slots_data[f"tableau_{i}"] = []
 
-        # group cards by their target slot
         for card in self.cards:
             card_id = f"{card.rank.name}_{card.suite.name}"
             if card_id in save_data:
                 state = save_data[card_id]
                 slots_data[state["slot"]].append((state["pile_index"], card, state["face_up"]))
 
-        # reconstruct the game state in the correct order for each slot
         for slot_name, card_tuples in slots_data.items():
-            # sorts the cards by their pile index to maintain data integrity
             card_tuples.sort(key=lambda x: x[0])
             
-            # find the target slot object based on slot name
             if slot_name == "stock": target_slot = self.stock
             elif slot_name == "waste": target_slot = self.waste
             elif slot_name.startswith("foundation_"): 
@@ -289,7 +295,6 @@ class Solitaire(ft.Stack):
             elif slot_name.startswith("tableau_"):
                 target_slot = self.tableau[int(slot_name.split("_")[1])]
 
-            # places card
             for _, card, face_up in card_tuples:
                 if face_up:
                     card.turn_face_up()
@@ -299,18 +304,74 @@ class Solitaire(ft.Stack):
                 card.slot = target_slot
                 target_slot.pile.append(card)
                 
-                # screen coords calculations
                 if target_slot in self.tableau:
                     card.top = target_slot.top + target_slot.pile.index(card) * CARD_OFFSET
                 else:
                     card.top = target_slot.top
                 card.left = target_slot.left
                 
-                # finally, add cards to the GUI
                 self.controls.append(card)
 
         self.update()
-        print("Game loaded successfully!")
+        print(f"{save_name} loaded successfully!")
+    
+    async def open_save_menu(self, e=None):
+        """handles the save menu, which is a dialog that shows the list of saved games and allows the user to manage the saves"""
+        prefs = ft.SharedPreferences()
+        keys = await prefs.get_keys("solitaire_save_")
+        
+        saves_list = ft.ListView(expand=True, spacing=10, padding=10)
+        
+        dialog = ft.AlertDialog(
+            title=ft.Text(f"Saved Games ({len(keys) if keys else 0})"),
+            content=ft.Container(width=400, height=300, content=saves_list)
+        )
+        
+        async def close_dialog(e=None):
+            dialog.open = False
+            self.page.update()
+            
+        dialog.actions = [ft.TextButton("Close", on_click=close_dialog)]
+        
+        async def load_selected(e, save_name):
+            await self.load_game(save_name)
+            await close_dialog()
+            
+        async def delete_selected(e, save_name, row):
+            await prefs.remove(save_name)
+            saves_list.controls.remove(row)
+            dialog.title.value = f"Saved Games ({len(saves_list.controls)})"
+            self.page.update()
+
+        if keys:
+            # build a row for each save file
+            for key in sorted(keys, reverse=True): # shows newest saves at the top
+                row = ft.Row(
+                    controls=[
+                        ft.Text(key, expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.DOWNLOAD,
+                            on_click=lambda e,
+                            k=key: load_selected(e, k)
+                            ),
+                    ]
+                )
+                
+                row.controls.append(
+                    ft.IconButton(
+                        icon=ft.Icons.DELETE,
+                        icon_color="RED",
+                        on_click=lambda e,
+                        k=key,
+                        r=row: delete_selected(e, k, r)
+                    )
+                )
+                
+                saves_list.controls.append(row)
+            
+        self.page.overlay.append(dialog)
+        dialog.open = True
+        self.page.update()
     
     def clear_game_state(self, e=None):
         """clears the game state by emptying all appropriate game data"""
