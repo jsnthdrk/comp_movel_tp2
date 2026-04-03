@@ -33,6 +33,7 @@ class Solitaire(ft.Stack):
         self.height = SOLITAIRE_HEIGHT
         self.history = [] # for the undo functionality, will function as a stack of moves to iterate from when undoing
         self.current_save_name = None
+        self.current_card_back = "/images/card0.png"
 
     def did_mount(self):
         """initializer of the game, creates the deck, slots and deals the cards to the board"""
@@ -444,3 +445,63 @@ class Solitaire(ft.Stack):
         for slot in self.tableau: slot.pile.clear()
         self.history.clear()
   
+    async def open_deck_menu(self, e=None):
+        """opens a visual menu to select card back design
+        - close_dialog: helper to close menu
+        - create_select_handler: factory function to avoid lambda async
+        - handler: when a design is selected, manipulates SharedPreferences to save it, then updates all cards with the new back design"""
+        
+        deck_options = [
+            "/images/card0.png",
+            "/images/card1.jpg",
+            "/images/card2.jpg",
+            "/images/card3.jpg",
+            "/images/card4.jpg",
+        ]
+        
+        dlg = ft.AlertDialog(title=ft.Text("Select Deck Style"))
+        
+        async def close_dialog(e=None):
+            dlg.open = False
+            self.page.update()
+            
+        dlg.actions = [ft.TextButton("Close", on_click=close_dialog)]
+        
+        options_row = ft.Row(alignment=ft.MainAxisAlignment.CENTER, spacing=15)
+        
+        async def create_select_handler(selected_deck):
+            async def handler(e):
+                self.current_card_back = selected_deck
+                await ft.SharedPreferences().set("preferred_deck", selected_deck)
+                
+                for card in self.cards:
+                    if not card.face_up:
+                        card.content.content.src = selected_deck
+                    
+                self.update()
+                await close_dialog()
+            return handler
+        
+        # build clickable flet container for each img
+        for src in deck_options:
+            options_row.controls.append(
+                ft.Container(
+                    content=ft.Image(src=src, width=70, height=100, fit=ft.BoxFit.COVER),
+                    border_radius=6,
+                    border=ft.Border.all(2, ft.Colors.BLUE_400) if self.current_card_back == src else None,
+                    ink=True,
+                    on_click=create_select_handler(src)
+                )
+            )
+        
+        dlg.content = options_row
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+        
+    async def load_user_deck_preferences(self):
+        """loads user's deck preferences"""
+        prefs = ft.SharedPreferences()
+        saved_deck = await prefs.get("preferred_deck")
+        if saved_deck:
+            self.current_card_back = saved_deck
