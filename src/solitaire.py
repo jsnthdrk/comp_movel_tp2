@@ -469,7 +469,7 @@ class Solitaire(ft.Stack):
         
         options_row = ft.Row(alignment=ft.MainAxisAlignment.CENTER, spacing=15)
         
-        async def create_select_handler(selected_deck):
+        def create_select_handler(selected_deck):
             async def handler(e):
                 self.current_card_back = selected_deck
                 await ft.SharedPreferences().set("preferred_deck", selected_deck)
@@ -477,6 +477,7 @@ class Solitaire(ft.Stack):
                 for card in self.cards:
                     if not card.face_up:
                         card.content.content.src = selected_deck
+                        card.update()
                     
                 self.update()
                 await close_dialog()
