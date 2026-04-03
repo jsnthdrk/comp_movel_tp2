@@ -7,34 +7,42 @@ import flet as ft
 from card import Card, CARD_OFFSET
 from slot import Slot
 import json
+import datetime
 
 
 class Suite:
     def __init__(self, suite_name, suite_color):
+        """skeleton of our class"""
         self.name = suite_name
         self.color = suite_color
 
 
 class Rank:
     def __init__(self, card_name, card_value):
+        """skeleton of our class"""
         self.name = card_name
         self.value = card_value
 
 
 class Solitaire(ft.Stack):
     def __init__(self):
+        """skeleton of our class"""
         super().__init__()
         self.controls = []
         self.width = SOLITAIRE_WIDTH
         self.height = SOLITAIRE_HEIGHT
         self.history = [] # for the undo functionality, will function as a stack of moves to iterate from when undoing
+        self.current_save_name = None
+        self.current_card_back = "/images/card0.png"
 
     def did_mount(self):
+        """initializer of the game, creates the deck, slots and deals the cards to the board"""
         self.create_card_deck()
         self.create_slots()
         self.deal_cards()
 
     def create_card_deck(self):
+        """inits our card deck with the 52 cards, from 4 suits and 13 ranks"""
         suites = [
             Suite("hearts", "RED"),
             Suite("diamonds", "RED"),
@@ -64,6 +72,7 @@ class Solitaire(ft.Stack):
                 self.cards.append(Card(solitaire=self, suite=suite, rank=rank))
 
     def create_slots(self):
+        """creates the slots that will hold the cards, pile to draw from, waste pile, foundations and tableau(playing area)"""
         self.stock = Slot(solitaire=self, top=0, left=0, border=ft.border.all(1))
 
         self.waste = Slot(solitaire=self, top=0, left=100, border=None)
@@ -89,6 +98,7 @@ class Solitaire(ft.Stack):
         self.update()
 
     def deal_cards(self):
+        """shuffles the cards and deals them to the board according to the defined rules of solitaire"""
         random.shuffle(self.cards)
         self.controls.extend(self.cards)
 
@@ -116,6 +126,10 @@ class Solitaire(ft.Stack):
         self.update()
 
     def check_foundations_rules(self, card, slot):
+        """ensures that we can place the card on the foundation according to the following conditions:
+        - if the target slot has no cards, only an Ace of any suit/color can be placed
+        - if the target slot has cards, the card being moved MUST be of the SAME SUIT, SAME COLOR and 1 RANK HIGHER than the current card
+        - logically, the card must be placed face up"""
         top_card = slot.get_top_card()
         if top_card is not None:
             return (
@@ -126,6 +140,10 @@ class Solitaire(ft.Stack):
             return card.rank.name == "Ace"
 
     def check_tableau_rules(self, card, slot):
+        """ensures that we can place the card on the target according to the following conditions:
+        - if the target slot has cards, the card being placed must be of opposite color and 1 rank lower than the card already in the slot
+        - if the target slot is empty, only a King (of any suit/color) can be placed
+        - logically, the card must be placed face up"""
         top_card = slot.get_top_card()
         if top_card is not None:
             return (
@@ -137,6 +155,7 @@ class Solitaire(ft.Stack):
             return card.rank.name == "King"
 
     def restart_stock(self):
+        """when the stock is clicked, recycles cards"""
         cards_in_waste = self.waste.pile.copy()
         self.history.append({
             "action": "recycle_stock",
@@ -155,6 +174,7 @@ class Solitaire(ft.Stack):
         
         # reconstruct the game data from scratch (new game)
         self.history.clear()
+        self.current_save_name = None
         self.create_card_deck()
         self.create_slots()
         self.deal_cards()
@@ -202,6 +222,7 @@ class Solitaire(ft.Stack):
         self.update()
     
     def check_win(self):
+        """checks win condition"""
         cards_num = 0
         for slot in self.foundations:
             cards_num += len(slot.pile)
@@ -210,6 +231,7 @@ class Solitaire(ft.Stack):
         return False
 
     def winning_sequence(self):
+        """plays a winning animation"""
         for slot in self.foundations:
             for card in slot.pile:
                 card.animate_position = 2000
@@ -221,10 +243,8 @@ class Solitaire(ft.Stack):
             ft.AlertDialog(title=ft.Text("Congratulations! You won!"), open=True)
         )
     
-    async def save_game(self, e=None):
-        """saves the game state to client's storage (browser), so that it can be loaded later at any time,
-        offers a dropdown menu to choose from save slots, and to either delete the save or load it"""
-        
+    async def _perform_save(self, save_name):
+        """core logic to serialize and save the board state to a specific filename."""
         save_data = {}
         for card in self.cards:
             card_id = f"{card.rank.name}_{card.suite.name}"
@@ -241,17 +261,64 @@ class Solitaire(ft.Stack):
                 "pile_index": card.slot.pile.index(card)
             }
             
-        # save_id = 0000
         save_string = json.dumps(save_data)
-        # await ft.SharedPreferences().set(f"solitaire_save_{save_id+1}", save_string) -> later
-        # print(f"Game saved with id: {save_id+1}") # debug
-        await ft.SharedPreferences().set("solitaire_save", save_string)
-        print(f"Game saved!") # debug
+        await ft.SharedPreferences().set(save_name, save_string)
+        self.current_save_name = save_name
+        print(f"Game saved successfully to: {save_name}")
+
+    async def _generate_new_save(self):
+        """helper to calculate the next ID and create a fresh save file."""
+        prefs = ft.SharedPreferences()
+        keys = await prefs.get_keys("solitaire_save_")
+        
+        if keys:
+            ids = [int(k.split("_")[2]) for k in keys if len(k.split("_")) >= 3 and k.split("_")[2].isdigit()]
+            next_id = max(ids) + 1 if ids else 0
+        else:
+            next_id = 0
+            
+        date_str = datetime.datetime.now().strftime("%Y_%m_%d_%H:%M:%S")
+        new_save_name = f"solitaire_save_{next_id:04d}_{date_str}"
+        await self._perform_save(new_save_name)
+
+    async def save_game(self, e=None):
+        """triggered by save button. opens dialog when a save is already loaded, then prompts the user to eitehr overwrite or create a new file."""
+        if self.current_save_name:
+            dlg = ft.AlertDialog(
+                title=ft.Text("Save Options"),
+                content=ft.Text(f"You are currently playing on '{self.current_save_name}'.\nWould you like to overwrite it or create a brand new save file?")
+            )
+            
+            async def close_dialog(e=None):
+                dlg.open = False
+                self.page.update()
                 
-    async def load_game(self, e=None):
+            async def overwrite_save(e):
+                await self._perform_save(self.current_save_name)
+                await close_dialog()
+                
+            async def create_new(e):
+                await self._generate_new_save()
+                await close_dialog()
+                
+            dlg.actions = [
+                ft.TextButton("Overwrite", on_click=overwrite_save),
+                ft.TextButton("Create New", on_click=create_new),
+                ft.TextButton("Cancel", on_click=close_dialog)
+            ]
+            
+            self.page.overlay.append(dlg)
+            dlg.open = True
+            self.page.update()
+        else:
+            # if no save is currently loaded, creates new one
+            await self._generate_new_save()
+                
+    async def load_game(self, save_name):
         """loads a previously saved game state from client's storage, reloads the game state using the values from the save,
         if no save is found, does nothing"""
-        save_string = await ft.SharedPreferences().get(f"solitaire_save")
+        prefs = ft.SharedPreferences()
+        save_string = await prefs.get(save_name)
         
         if not save_string:
             print("No save data found")
@@ -260,28 +327,21 @@ class Solitaire(ft.Stack):
         save_data = json.loads(save_string)
         
         self.clear_game_state()
-        
-        # remove cards from GUI so we can "draw" them again in the correct order that they were saved
         self.controls = [c for c in self.controls if c not in self.cards]
 
-        # creates a simple data structure so we can order the cards before loading
         slots_data = {"stock": [], "waste": []}
         for i in range(4): slots_data[f"foundation_{i}"] = []
         for i in range(7): slots_data[f"tableau_{i}"] = []
 
-        # group cards by their target slot
         for card in self.cards:
             card_id = f"{card.rank.name}_{card.suite.name}"
             if card_id in save_data:
                 state = save_data[card_id]
                 slots_data[state["slot"]].append((state["pile_index"], card, state["face_up"]))
 
-        # reconstruct the game state in the correct order for each slot
         for slot_name, card_tuples in slots_data.items():
-            # sorts the cards by their pile index to maintain data integrity
             card_tuples.sort(key=lambda x: x[0])
             
-            # find the target slot object based on slot name
             if slot_name == "stock": target_slot = self.stock
             elif slot_name == "waste": target_slot = self.waste
             elif slot_name.startswith("foundation_"): 
@@ -289,7 +349,6 @@ class Solitaire(ft.Stack):
             elif slot_name.startswith("tableau_"):
                 target_slot = self.tableau[int(slot_name.split("_")[1])]
 
-            # places card
             for _, card, face_up in card_tuples:
                 if face_up:
                     card.turn_face_up()
@@ -299,18 +358,84 @@ class Solitaire(ft.Stack):
                 card.slot = target_slot
                 target_slot.pile.append(card)
                 
-                # screen coords calculations
                 if target_slot in self.tableau:
                     card.top = target_slot.top + target_slot.pile.index(card) * CARD_OFFSET
                 else:
                     card.top = target_slot.top
                 card.left = target_slot.left
                 
-                # finally, add cards to the GUI
                 self.controls.append(card)
 
         self.update()
-        print("Game loaded successfully!")
+        self.current_save_name = save_name
+        print(f"{save_name} loaded successfully!")
+    
+    async def open_save_menu(self, e=None):
+        """handles the save menu, which is a dialog that shows the list of saved games and allows the user to manage the saves, has the following functions inside:
+        - close_dialog: cloes the save menu dialog
+        - load_selected: loads the selected save and then closes the dialog
+        - delete_selected: deletes the selected save from the storage, thus removes it from the list, then closes the dialog"""
+        prefs = ft.SharedPreferences()
+        keys = await prefs.get_keys("solitaire_save_")
+        
+        saves_list = ft.ListView(expand=True, spacing=10, padding=10)
+        
+        dialog = ft.AlertDialog(
+            title=ft.Text(f"Saved Games ({len(keys) if keys else 0})"),
+            content=ft.Container(width=400, height=300, content=saves_list)
+        )
+        
+        async def close_dialog(e=None):
+            dialog.open = False
+            self.page.update()
+            
+        dialog.actions = [ft.TextButton("Close", on_click=close_dialog)]
+        
+        async def load_selected(e, save_name):
+            await self.load_game(save_name)
+            await close_dialog()
+            
+        async def delete_selected(e, save_name, row):
+            await prefs.remove(save_name)
+            saves_list.controls.remove(row)
+            dialog.title.value = f"Saved Games ({len(saves_list.controls)})"
+            self.page.update()
+
+        if keys:
+            def create_load_handler(save_name):
+                async def handler(e):
+                    await load_selected(e, save_name)
+                return handler
+
+            def create_delete_handler(save_name, target_row):
+                async def handler(e):
+                    await delete_selected(e, save_name, target_row)
+                return handler
+            # build a row for each save file
+            for key in sorted(keys, reverse=True): # shows newest saves at the top
+                row = ft.Row(
+                    controls=[
+                        ft.Text(key, expand=True),
+                        ft.IconButton(
+                            icon=ft.Icons.DOWNLOAD,
+                            on_click=create_load_handler(key)
+                            ),
+                    ]
+                )
+                
+                row.controls.append(
+                    ft.IconButton(
+                        icon=ft.Icons.DELETE,
+                        icon_color="RED",
+                        on_click=create_delete_handler(key,row)
+                    )
+                )
+                
+                saves_list.controls.append(row)
+            
+        self.page.overlay.append(dialog)
+        dialog.open = True
+        self.page.update()
     
     def clear_game_state(self, e=None):
         """clears the game state by emptying all appropriate game data"""
@@ -320,3 +445,64 @@ class Solitaire(ft.Stack):
         for slot in self.tableau: slot.pile.clear()
         self.history.clear()
   
+    async def open_deck_menu(self, e=None):
+        """opens a visual menu to select card back design
+        - close_dialog: helper to close menu
+        - create_select_handler: factory function to avoid lambda async
+        - handler: when a design is selected, manipulates SharedPreferences to save it, then updates all cards with the new back design"""
+        
+        deck_options = [
+            "/images/card0.png",
+            "/images/card1.jpg",
+            "/images/card2.jpg",
+            "/images/card3.jpg",
+            "/images/card4.jpg",
+        ]
+        
+        dlg = ft.AlertDialog(title=ft.Text("Select Deck Style"))
+        
+        async def close_dialog(e=None):
+            dlg.open = False
+            self.page.update()
+            
+        dlg.actions = [ft.TextButton("Close", on_click=close_dialog)]
+        
+        options_row = ft.Row(alignment=ft.MainAxisAlignment.CENTER, spacing=15)
+        
+        def create_select_handler(selected_deck):
+            async def handler(e):
+                self.current_card_back = selected_deck
+                await ft.SharedPreferences().set("preferred_deck", selected_deck)
+                
+                for card in self.cards:
+                    if not card.face_up:
+                        card.content.content.src = selected_deck
+                        card.update()
+                    
+                self.update()
+                await close_dialog()
+            return handler
+        
+        # build clickable flet container for each img
+        for src in deck_options:
+            options_row.controls.append(
+                ft.Container(
+                    content=ft.Image(src=src, width=70, height=100, fit=ft.BoxFit.COVER),
+                    border_radius=6,
+                    border=ft.Border.all(2, ft.Colors.BLUE_400) if self.current_card_back == src else None,
+                    ink=True,
+                    on_click=create_select_handler(src)
+                )
+            )
+        
+        dlg.content = options_row
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+        
+    async def load_user_deck_preferences(self):
+        """loads user's deck preferences"""
+        prefs = ft.SharedPreferences()
+        saved_deck = await prefs.get("preferred_deck")
+        if saved_deck:
+            self.current_card_back = saved_deck

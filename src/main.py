@@ -28,10 +28,16 @@ def main(page: ft.Page):
     load_button = ft.Button(
         content=ft.Text("Load Game"),
         icon=ft.Icons.CLOUD_UPLOAD,
-        on_click=solitaire.load_game
+        on_click=solitaire.open_save_menu
+    )
+    
+    deck_button = ft.Button(
+        content=ft.Text("Card Style"),
+        icon=ft.Icons.DESIGN_SERVICES,
+        on_click=solitaire.open_deck_menu
     )
 
-    page.add(ft.Row([restart_button, undo_button, save_button, load_button]), solitaire)
+    page.add(ft.Row([restart_button, undo_button, save_button, load_button, deck_button]), solitaire)
 
 
 ft.run(main, assets_dir="assets")
