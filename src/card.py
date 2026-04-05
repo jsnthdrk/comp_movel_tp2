@@ -26,7 +26,7 @@ class Card(ft.GestureDetector):
         self.content = ft.Container(
             width=CARD_WIDTH,
             height=CARD_HEIGHT,
-            border_radius=ft.border_radius.all(6),
+            border_radius=ft.Border.all(6),
             content=ft.Image(src=self.solitaire.current_card_back),
         )
         self.draggable_pile = [self]
