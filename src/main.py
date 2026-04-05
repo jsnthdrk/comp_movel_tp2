@@ -49,7 +49,7 @@ def main(page: ft.Page):
         on_click=solitaire.give_hint
     )
 
-    page.add(ft.Row([restart_button, undo_button, save_button, load_button, deck_button, rules_button, hint_button]), solitaire, solitaire.score_text, solitaire.timer_text)
+    page.add(ft.Row([restart_button, undo_button, save_button, load_button, deck_button, rules_button, hint_button]), solitaire, solitaire.score_text, solitaire.timer_text, solitaire.moves_text)
 
 
 ft.run(main, assets_dir="assets")

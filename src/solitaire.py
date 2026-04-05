@@ -42,6 +42,8 @@ class Solitaire(ft.Stack):
         self.is_timer_running = False
         self.score_text = ft.Text("Score: 0", size=18, weight="bold")
         self.timer_text = ft.Text("Time: 00:00", size=18, weight="bold")
+        self.moves = 0
+        self.moves_text = ft.Text("Moves: 0", size=18, weight="bold")
 
     def did_mount(self):
         """initializer of the game, creates the deck, slots and deals the cards to the board"""
@@ -187,6 +189,8 @@ class Solitaire(ft.Stack):
         self.current_save_name = None
         self.score = 0
         self.timer_seconds = 0
+        self.moves = 0
+        self.update_moves(0)
         self.update_score(0)
         self.create_card_deck()
         self.create_slots()
@@ -204,6 +208,7 @@ class Solitaire(ft.Stack):
         
         last_move = self.history.pop()
         self.update_score(-last_move.get("points", 0)) # subtracts the points for whatever was added before undoing
+        self.update_moves(-1)
         action = last_move["action"]
         print(f"Action: {action}") # debug
         
@@ -262,6 +267,7 @@ class Solitaire(ft.Stack):
         save_data = {
             "score": self.score,
             "timer_seconds": self.timer_seconds,
+            "moves": self.moves,
             "cards": {}
         }
         for card in self.cards:
@@ -349,12 +355,15 @@ class Solitaire(ft.Stack):
             card_states = save_data["cards"]
             self.score = save_data.get("score", 0)
             self.timer_seconds = save_data.get("timer_seconds", 0)
+            self.moves = save_data.get("moves", 0)
         else:
             card_states = save_data
             self.score = 0
             self.timer_seconds = 0
+            self.moves = 0
         
         self.update_score(0)
+        self.update_moves(0)
         self.clear_game_state()
         self.controls = [c for c in self.controls if c not in self.cards]
 
@@ -673,3 +682,14 @@ class Solitaire(ft.Stack):
             await asyncio.sleep(0.4)
             self.stock.border = original_border
             self.stock.update()
+    
+    def update_moves(self, amount=1):
+        """increments move counter by 1 whenver a move is made"""
+        self.moves += amount
+        if self.moves < 0:
+            self.moves = 0
+        self.moves_text.value = f"Moves: {self.moves}"
+        try:
+            self.moves_text.update()
+        except:
+            pass
