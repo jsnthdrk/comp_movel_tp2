@@ -85,7 +85,7 @@ class Solitaire(ft.Stack):
 
     def create_slots(self):
         """creates the slots that will hold the cards, pile to draw from, waste pile, foundations and tableau(playing area)"""
-        self.stock = Slot(solitaire=self, top=0, left=0, border=ft.border.all(1))
+        self.stock = Slot(solitaire=self, top=0, left=0, border=ft.Border.all(1))
 
         self.waste = Slot(solitaire=self, top=0, left=100, border=None)
 
@@ -93,7 +93,7 @@ class Solitaire(ft.Stack):
         x = 300
         for i in range(4):
             self.foundations.append(
-                Slot(solitaire=self, top=0, left=x, border=ft.border.all(1, "outline"))
+                Slot(solitaire=self, top=0, left=x, border=ft.Border.all(1, "outline"))
             )
             x += 100
 
