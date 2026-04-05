@@ -600,5 +600,76 @@ class Solitaire(ft.Stack):
         self.page.update()
     
     def close_rules(self,dlg):
+        """closes rules modal"""
         dlg.open = False
         self.page.update()
+    
+    async def _blink_card(self, card):
+        """highlights the card through a yellow blink to show the player the next possible move as a hint"""
+        original_border = card.content.border
+        card.content.border = ft.Border.all(4, ft.Colors.YELLOW_ACCENT_700)
+        card.update()
+        await asyncio.sleep(0.4)
+        card.content.border = original_border
+        card.update()
+    
+    async def give_hint(self, e=None):
+        """searches the entirety of the game board for best move to help the player, then highlights the card"""
+        # priority 1: move to foundation - best move possible to free a column or to give way for a card to be flipped
+        # test if card can be moved from waste to foundation
+        waste_top = self.waste.get_top_card()
+        if waste_top:
+            for f_slot in self.foundations:
+                if self.check_foundations_rules(waste_top, f_slot):
+                    await self._blink_card(waste_top)
+                    return
+                    
+        # test if card can be moved from tableau to foundation
+        for t_slot in self.tableau:
+            t_top = t_slot.get_top_card()
+            if t_top and t_top.face_up:
+                for f_slot in self.foundations:
+                    if self.check_foundations_rules(t_top, f_slot):
+                        await self._blink_card(t_top)
+                        return
+
+        # priority 2: useful moves inside the tableau (flip card face up)
+        for source_slot in self.tableau:
+            if len(source_slot.pile) == 0:
+                continue
+                
+            # find the card that is facing up in the column (most "deep" card)
+            # we want to "move" the whole stack
+            first_face_up_idx = None
+            for i, card in enumerate(source_slot.pile):
+                if card.face_up:
+                    first_face_up_idx = i
+                    break
+            
+            if first_face_up_idx is not None:
+                base_card = source_slot.pile[first_face_up_idx]
+                
+                # useless to move a King from an empty column to another empty column
+                if base_card.rank.name == "King" and first_face_up_idx == 0:
+                    continue 
+
+                for dest_slot in self.tableau:
+                    if source_slot != dest_slot and self.check_tableau_rules(base_card, dest_slot):
+                        await self._blink_card(base_card)
+                        return
+
+        # priority 3: move from waste to tableau
+        if waste_top:
+            for t_slot in self.tableau:
+                if self.check_tableau_rules(waste_top, t_slot):
+                    await self._blink_card(waste_top)
+                    return
+
+        # priority 4: if there are no best possible moves, hint to draw a card
+        if len(self.stock.pile) > 0 or len(self.waste.pile) > 0:
+            original_border = self.stock.border
+            self.stock.border = ft.Border.all(4, ft.Colors.YELLOW_ACCENT_700)
+            self.stock.update()
+            await asyncio.sleep(0.4)
+            self.stock.border = original_border
+            self.stock.update()
