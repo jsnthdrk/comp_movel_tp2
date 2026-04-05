@@ -249,18 +249,30 @@ class Solitaire(ft.Stack):
             return True
         return False
 
-    def winning_sequence(self):
+    async def winning_sequence(self):
         """plays a winning animation"""
         for slot in self.foundations:
             for card in slot.pile:
-                card.animate_position = 2000
                 card.move_on_top()
-                card.top = random.randint(0, SOLITAIRE_HEIGHT)
-                card.left = random.randint(0, SOLITAIRE_WIDTH)
+                card.top = random.randint(0, SOLITAIRE_HEIGHT - 100)
+                card.left = random.randint(0, SOLITAIRE_WIDTH - 70)
                 self.update()
-        self.controls.append(
-            ft.AlertDialog(title=ft.Text("Congratulations! You won!"), open=True)
-        )
+                await asyncio.sleep(0.05)
+        
+        await asyncio.sleep(0.5)
+                
+        dlg = ft.AlertDialog(title=ft.Text("Congratulations! You won!"))
+        
+        async def play_again_click(e):
+            dlg.open = False     
+            self.page.update()    
+            self.restart_game()
+
+        dlg.actions = [ft.TextButton("Play Again", on_click=play_again_click)]
+        
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
     
     async def _perform_save(self, save_name):
         """core logic to serialize and save the board state to a specific filename."""

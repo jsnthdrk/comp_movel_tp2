@@ -83,7 +83,7 @@ class Card(ft.GestureDetector):
             slot.pile.append(card)
 
         if self.solitaire.check_win():
-            self.solitaire.winning_sequence()
+            self.solitaire.page.run_task(self.solitaire.winning_sequence)
 
         self.solitaire.update()
 
