@@ -1,6 +1,7 @@
 SOLITAIRE_WIDTH = 1000
 SOLITAIRE_HEIGHT = 500
 
+import asyncio
 import random
 
 import flet as ft
@@ -34,12 +35,21 @@ class Solitaire(ft.Stack):
         self.history = [] # for the undo functionality, will function as a stack of moves to iterate from when undoing
         self.current_save_name = None
         self.current_card_back = "/images/card0.png"
+        
+        # components regarding timer and scoring
+        self.score = 0
+        self.timer_seconds = 0
+        self.is_timer_running = False
+        self.score_text = ft.Text("Score: 0", size=18, weight="bold")
+        self.timer_text = ft.Text("Time: 00:00", size=18, weight="bold")
 
     def did_mount(self):
         """initializer of the game, creates the deck, slots and deals the cards to the board"""
         self.create_card_deck()
         self.create_slots()
         self.deal_cards()
+        self.is_timer_running = True
+        self.page.run_task(self.update_timer)
 
     def create_card_deck(self):
         """inits our card deck with the 52 cards, from 4 suits and 13 ranks"""
@@ -175,6 +185,9 @@ class Solitaire(ft.Stack):
         # reconstruct the game data from scratch (new game)
         self.history.clear()
         self.current_save_name = None
+        self.score = 0
+        self.timer_seconds = 0
+        self.update_score(0)
         self.create_card_deck()
         self.create_slots()
         self.deal_cards()
@@ -190,6 +203,7 @@ class Solitaire(ft.Stack):
             return
         
         last_move = self.history.pop()
+        self.update_score(-last_move.get("points", 0)) # subtracts the points for whatever was added before undoing
         action = last_move["action"]
         print(f"Action: {action}") # debug
         
@@ -245,7 +259,11 @@ class Solitaire(ft.Stack):
     
     async def _perform_save(self, save_name):
         """core logic to serialize and save the board state to a specific filename."""
-        save_data = {}
+        save_data = {
+            "score": self.score,
+            "timer_seconds": self.timer_seconds,
+            "cards": {}
+        }
         for card in self.cards:
             card_id = f"{card.rank.name}_{card.suite.name}"
             
@@ -255,7 +273,7 @@ class Solitaire(ft.Stack):
             elif card.slot in self.tableau: slot_name = f"tableau_{self.tableau.index(card.slot)}"
             else: continue
             
-            save_data[card_id] = {
+            save_data["cards"][card_id] = {
                 "slot": slot_name,
                 "face_up": card.face_up,
                 "pile_index": card.slot.pile.index(card)
@@ -326,6 +344,17 @@ class Solitaire(ft.Stack):
 
         save_data = json.loads(save_string)
         
+        # if by chance we have old files without scoring and timer data, we set them to default values to avoid breaking the loading process
+        if "cards" in save_data:
+            card_states = save_data["cards"]
+            self.score = save_data.get("score", 0)
+            self.timer_seconds = save_data.get("timer_seconds", 0)
+        else:
+            card_states = save_data
+            self.score = 0
+            self.timer_seconds = 0
+        
+        self.update_score(0)
         self.clear_game_state()
         self.controls = [c for c in self.controls if c not in self.cards]
 
@@ -335,8 +364,8 @@ class Solitaire(ft.Stack):
 
         for card in self.cards:
             card_id = f"{card.rank.name}_{card.suite.name}"
-            if card_id in save_data:
-                state = save_data[card_id]
+            if card_id in card_states:
+                state = card_states[card_id]
                 slots_data[state["slot"]].append((state["pile_index"], card, state["face_up"]))
 
         for slot_name, card_tuples in slots_data.items():
@@ -506,3 +535,27 @@ class Solitaire(ft.Stack):
         saved_deck = await prefs.get("preferred_deck")
         if saved_deck:
             self.current_card_back = saved_deck
+    
+    async def update_timer(self):
+        """background loop that updates the clock every second"""
+        while self.is_timer_running:
+            await asyncio.sleep(1)
+            self.timer_seconds += 1
+            minutes = self.timer_seconds // 60
+            seconds = self.timer_seconds % 60
+            self.timer_text.value = f"Time: {minutes:02d}:{seconds:02d}"
+            try:
+                self.timer_text.update()
+            except Exception as e:
+                pass
+    
+    def update_score(self, points):
+        """central function hub to manipulate the scoring"""
+        self.score += points
+        if self.score < 0:
+            self.score = 0
+        self.score_text.value = f"Score: {self.score}"
+        try:
+            self.score_text.update()
+        except Exception as e:
+            pass

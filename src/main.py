@@ -37,7 +37,7 @@ def main(page: ft.Page):
         on_click=solitaire.open_deck_menu
     )
 
-    page.add(ft.Row([restart_button, undo_button, save_button, load_button, deck_button]), solitaire)
+    page.add(ft.Row([restart_button, undo_button, save_button, load_button, deck_button]), solitaire, solitaire.score_text, solitaire.timer_text)
 
 
 ft.run(main, assets_dir="assets")
