@@ -559,3 +559,46 @@ class Solitaire(ft.Stack):
             self.score_text.update()
         except Exception as e:
             pass
+    
+    def show_rules(self, e=None):
+        """opens a modal to display game rules and scoring system"""
+        rules_text = (
+            "Solitaire, or Klondike, is played with a standard 52-card deck, thus, we have 52! possible combinations when starting a new game.\n\n"
+            "When the game starts, we are presented with our deck of cards to draw from, our waste, 4 foundations and 7 columns on the tableau.\n\n"
+            "The game's goal is to have all the cards ordered from lowest to highest in rank (Ace to King) and by suit in all 4 foundations, leaving our tableau empty.\n\n"
+            "Only the King card (of any suit) can be moved to an empty column, whereas we can/must move the Ace cards to the foundations to start sorting throughout the game.\n\n"
+            "The cards are then dealt as follows throughout the 7 columns (left to right), incrementing by 1 the number of cards face down on each column, leaving the top card face up:\n"
+            "* **Column 1:** 1 card face up\n"
+            "* **Column 2:** 1 card face up and 1 card face down\n"
+            "* **Column 3:** 1 card face up and 2 cards face down\n"
+            "* **Column 4:** 1 card face up and 3 cards face down\n"
+            "* **Column 5:** 1 card face up and 4 cards face down\n"
+            "* **Column 6:** 1 card face up and 5 cards face down\n"
+            "* **Column 7:** 1 card face up and 6 cards face down\n\n"
+            "### Scoring system\n"
+            "The scoring system starts at 0, and the following moves award points:\n"
+            "* **+5 points:** Moving a waste card to the tableau\n"
+            "* **+10 points:** Moving a card to a foundation slot\n"
+            "* **+5 points:** Flipping a card face up\n\n"
+            "### Main game loop\n"
+            "When moving cards between columns, the card you're moving must be a rank lower and different in color (e.g.: You can place a Red 4 beneath a Black 5)."
+        )
+        
+        dlg = ft.AlertDialog(
+            title=ft.Text("Klondike Solitaire Rules"),
+            content=ft.Container(
+                content=ft.Column(
+                    [ft.Markdown(rules_text)],
+                    scroll=ft.ScrollMode.AUTO
+                )
+            ),
+            actions=[ft.TextButton("Understood", on_click=lambda e: self.close_rules(dlg))]
+        )
+        
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+    
+    def close_rules(self,dlg):
+        dlg.open = False
+        self.page.update()
