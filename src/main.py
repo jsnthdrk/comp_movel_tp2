@@ -36,8 +36,20 @@ def main(page: ft.Page):
         icon=ft.Icons.DESIGN_SERVICES,
         on_click=solitaire.open_deck_menu
     )
+    
+    rules_button = ft.Button(
+        content=ft.Text("Game Rules"),
+        icon=ft.Icons.BOOK,
+        on_click=solitaire.show_rules
+    )
+    
+    hint_button = ft.Button(
+        content=ft.Text("Hint"),
+        icon=ft.Icons.LIGHTBULB,
+        on_click=solitaire.give_hint
+    )
 
-    page.add(ft.Row([restart_button, undo_button, save_button, load_button, deck_button]), solitaire, solitaire.score_text, solitaire.timer_text)
+    page.add(ft.Row([restart_button, undo_button, save_button, load_button, deck_button, rules_button, hint_button]), solitaire, solitaire.score_text, solitaire.timer_text, solitaire.moves_text)
 
 
 ft.run(main, assets_dir="assets")

@@ -42,6 +42,8 @@ class Solitaire(ft.Stack):
         self.is_timer_running = False
         self.score_text = ft.Text("Score: 0", size=18, weight="bold")
         self.timer_text = ft.Text("Time: 00:00", size=18, weight="bold")
+        self.moves = 0
+        self.moves_text = ft.Text("Moves: 0", size=18, weight="bold")
 
     def did_mount(self):
         """initializer of the game, creates the deck, slots and deals the cards to the board"""
@@ -187,6 +189,8 @@ class Solitaire(ft.Stack):
         self.current_save_name = None
         self.score = 0
         self.timer_seconds = 0
+        self.moves = 0
+        self.update_moves(0)
         self.update_score(0)
         self.create_card_deck()
         self.create_slots()
@@ -204,6 +208,7 @@ class Solitaire(ft.Stack):
         
         last_move = self.history.pop()
         self.update_score(-last_move.get("points", 0)) # subtracts the points for whatever was added before undoing
+        self.update_moves(-1)
         action = last_move["action"]
         print(f"Action: {action}") # debug
         
@@ -262,6 +267,7 @@ class Solitaire(ft.Stack):
         save_data = {
             "score": self.score,
             "timer_seconds": self.timer_seconds,
+            "moves": self.moves,
             "cards": {}
         }
         for card in self.cards:
@@ -349,12 +355,15 @@ class Solitaire(ft.Stack):
             card_states = save_data["cards"]
             self.score = save_data.get("score", 0)
             self.timer_seconds = save_data.get("timer_seconds", 0)
+            self.moves = save_data.get("moves", 0)
         else:
             card_states = save_data
             self.score = 0
             self.timer_seconds = 0
+            self.moves = 0
         
         self.update_score(0)
+        self.update_moves(0)
         self.clear_game_state()
         self.controls = [c for c in self.controls if c not in self.cards]
 
@@ -558,4 +567,129 @@ class Solitaire(ft.Stack):
         try:
             self.score_text.update()
         except Exception as e:
+            pass
+    
+    def show_rules(self, e=None):
+        """opens a modal to display game rules and scoring system"""
+        rules_text = (
+            "Solitaire, or Klondike, is played with a standard 52-card deck, thus, we have 52! possible combinations when starting a new game.\n\n"
+            "When the game starts, we are presented with our deck of cards to draw from, our waste, 4 foundations and 7 columns on the tableau.\n\n"
+            "The game's goal is to have all the cards ordered from lowest to highest in rank (Ace to King) and by suit in all 4 foundations, leaving our tableau empty.\n\n"
+            "Only the King card (of any suit) can be moved to an empty column, whereas we can/must move the Ace cards to the foundations to start sorting throughout the game.\n\n"
+            "The cards are then dealt as follows throughout the 7 columns (left to right), incrementing by 1 the number of cards face down on each column, leaving the top card face up:\n"
+            "* **Column 1:** 1 card face up\n"
+            "* **Column 2:** 1 card face up and 1 card face down\n"
+            "* **Column 3:** 1 card face up and 2 cards face down\n"
+            "* **Column 4:** 1 card face up and 3 cards face down\n"
+            "* **Column 5:** 1 card face up and 4 cards face down\n"
+            "* **Column 6:** 1 card face up and 5 cards face down\n"
+            "* **Column 7:** 1 card face up and 6 cards face down\n\n"
+            "### Scoring system\n"
+            "The scoring system starts at 0, and the following moves award points:\n"
+            "* **+5 points:** Moving a waste card to the tableau\n"
+            "* **+10 points:** Moving a card to a foundation slot\n"
+            "* **+5 points:** Flipping a card face up\n\n"
+            "### Main game loop\n"
+            "When moving cards between columns, the card you're moving must be a rank lower and different in color (e.g.: You can place a Red 4 beneath a Black 5)."
+        )
+        
+        dlg = ft.AlertDialog(
+            title=ft.Text("Klondike Solitaire Rules"),
+            content=ft.Container(
+                content=ft.Column(
+                    [ft.Markdown(rules_text)],
+                    scroll=ft.ScrollMode.AUTO
+                )
+            ),
+            actions=[ft.TextButton("Understood", on_click=lambda e: self.close_rules(dlg))]
+        )
+        
+        self.page.overlay.append(dlg)
+        dlg.open = True
+        self.page.update()
+    
+    def close_rules(self,dlg):
+        """closes rules modal"""
+        dlg.open = False
+        self.page.update()
+    
+    async def _blink_card(self, card):
+        """highlights the card through a yellow blink to show the player the next possible move as a hint"""
+        original_border = card.content.border
+        card.content.border = ft.Border.all(4, ft.Colors.YELLOW_ACCENT_700)
+        card.update()
+        await asyncio.sleep(0.4)
+        card.content.border = original_border
+        card.update()
+    
+    async def give_hint(self, e=None):
+        """searches the entirety of the game board for best move to help the player, then highlights the card"""
+        # priority 1: move to foundation - best move possible to free a column or to give way for a card to be flipped
+        # test if card can be moved from waste to foundation
+        waste_top = self.waste.get_top_card()
+        if waste_top:
+            for f_slot in self.foundations:
+                if self.check_foundations_rules(waste_top, f_slot):
+                    await self._blink_card(waste_top)
+                    return
+                    
+        # test if card can be moved from tableau to foundation
+        for t_slot in self.tableau:
+            t_top = t_slot.get_top_card()
+            if t_top and t_top.face_up:
+                for f_slot in self.foundations:
+                    if self.check_foundations_rules(t_top, f_slot):
+                        await self._blink_card(t_top)
+                        return
+
+        # priority 2: useful moves inside the tableau (flip card face up)
+        for source_slot in self.tableau:
+            if len(source_slot.pile) == 0:
+                continue
+                
+            # find the card that is facing up in the column (most "deep" card)
+            # we want to "move" the whole stack
+            first_face_up_idx = None
+            for i, card in enumerate(source_slot.pile):
+                if card.face_up:
+                    first_face_up_idx = i
+                    break
+            
+            if first_face_up_idx is not None:
+                base_card = source_slot.pile[first_face_up_idx]
+                
+                # useless to move a King from an empty column to another empty column
+                if base_card.rank.name == "King" and first_face_up_idx == 0:
+                    continue 
+
+                for dest_slot in self.tableau:
+                    if source_slot != dest_slot and self.check_tableau_rules(base_card, dest_slot):
+                        await self._blink_card(base_card)
+                        return
+
+        # priority 3: move from waste to tableau
+        if waste_top:
+            for t_slot in self.tableau:
+                if self.check_tableau_rules(waste_top, t_slot):
+                    await self._blink_card(waste_top)
+                    return
+
+        # priority 4: if there are no best possible moves, hint to draw a card
+        if len(self.stock.pile) > 0 or len(self.waste.pile) > 0:
+            original_border = self.stock.border
+            self.stock.border = ft.Border.all(4, ft.Colors.YELLOW_ACCENT_700)
+            self.stock.update()
+            await asyncio.sleep(0.4)
+            self.stock.border = original_border
+            self.stock.update()
+    
+    def update_moves(self, amount=1):
+        """increments move counter by 1 whenver a move is made"""
+        self.moves += amount
+        if self.moves < 0:
+            self.moves = 0
+        self.moves_text.value = f"Moves: {self.moves}"
+        try:
+            self.moves_text.update()
+        except:
             pass

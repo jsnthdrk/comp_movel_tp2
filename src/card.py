@@ -123,11 +123,14 @@ class Card(ft.GestureDetector):
                 ) and self.solitaire.check_tableau_rules(self, slot):
                     points = 5 if self.slot == self.solitaire.waste else 0 # +5 points from moving from waste to tableau
                     self.solitaire.update_score(points)
+                    moves = 1
+                    self.solitaire.update_moves(moves)
                     self.solitaire.history.append({
                         "action": "move",
                         "cards": self.draggable_pile.copy(),
                         "source_slot": self.slot,
-                        "points": points
+                        "points": points,
+                        "moves": moves
                     })
                     self.place(slot)
                     return
@@ -140,11 +143,14 @@ class Card(ft.GestureDetector):
                     ) and self.solitaire.check_foundations_rules(self, slot):
                         points = 10 # +10 points for moving to foundation
                         self.solitaire.update_score(points)
+                        moves = 1
+                        self.solitaire.update_moves(moves)
                         self.solitaire.history.append({
                             "action": "move",
                             "cards": self.draggable_pile.copy(),
                             "source_slot": self.slot,
-                            "points": 10
+                            "points": 10,
+                            "moves": moves
                         })
                         self.place(slot)
                         return
@@ -158,19 +164,25 @@ class Card(ft.GestureDetector):
             if not self.face_up and len(self.draggable_pile) == 1:
                 points = 5 # +5 for flipping a card
                 self.solitaire.update_score(points)
+                moves = 1
+                self.solitaire.update_moves(moves)
                 self.solitaire.history.append({
                     "action": "flip",
                     "card": self,
-                    "points": points
+                    "points": points,
+                    "moves": moves
                 })
                 self.turn_face_up()
         elif self.slot == self.solitaire.stock:
             self.move_on_top()
+            moves = 1
+            self.solitaire.update_moves(moves)
             self.solitaire.history.append({
                     "action": "move_stock_waste",
                     "card": self,
                     "source_slot": self.solitaire.stock,
-                    "points": 0
+                    "points": 0,
+                    "moves": moves
                 })
             self.place(self.solitaire.waste)
             self.turn_face_up()
@@ -183,11 +195,14 @@ class Card(ft.GestureDetector):
                 if self.solitaire.check_foundations_rules(self, slot):
                     points = 10 # +10 for moving a card to foundation
                     self.solitaire.update_score(points)
+                    moves = 1
+                    self.solitaire.update_moves(moves)
                     self.solitaire.history.append({
                         "action": "move_to_foundation",
                         "cards": self.draggable_pile.copy(),
                         "source_slot": self.slot,
-                        "points": points
+                        "points": points,
+                        "moves": moves
                     })
                     self.place(slot)
                     return
