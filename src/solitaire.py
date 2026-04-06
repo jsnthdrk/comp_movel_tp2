@@ -5,7 +5,7 @@ import asyncio
 import random
 
 import flet as ft
-from card import Card, CARD_OFFSET
+from card import Card
 from slot import Slot
 import json
 import datetime
@@ -30,11 +30,12 @@ class Solitaire(ft.Stack):
         """skeleton of our class"""
         super().__init__()
         self.controls = []
-        self.width = SOLITAIRE_WIDTH
-        self.height = SOLITAIRE_HEIGHT
         self.history = [] # for the undo functionality, will function as a stack of moves to iterate from when undoing
         self.current_save_name = None
         self.current_card_back = "/images/card0.png"
+        
+        self.card_offset = 20
+        self.drop_proximity = 30
         
         # components regarding timer and scoring
         self.score = 0
@@ -44,14 +45,129 @@ class Solitaire(ft.Stack):
         self.timer_text = ft.Text("Time: 00:00", size=18, weight="bold")
         self.moves = 0
         self.moves_text = ft.Text("Moves: 0", size=18, weight="bold")
+        self.rotate_warning = ft.Text(
+            "Please rotate your device to landscape mode to play.", 
+            size=24, 
+            weight="bold", 
+            text_align=ft.TextAlign.CENTER,
+            color=ft.Colors.RED_400
+        )
 
     def did_mount(self):
         """initializer of the game, creates the deck, slots and deals the cards to the board"""
+        self.page.on_resize = self.handle_resize
         self.create_card_deck()
         self.create_slots()
         self.deal_cards()
         self.is_timer_running = True
         self.page.run_task(self.update_timer)
+        self.handle_resize(None)
+        
+    def handle_resize(self, e=None):
+        """helper function that handles resizing the game towards emulating a sort of responsiveness so the game board is scalable towards current dimensions"""
+        page_width = self.page.width if self.page.width else 1000 
+        page_height = self.page.height if self.page.height else 600
+        if page_width < 100: 
+            return
+
+        is_landscape = page_width > page_height
+
+        if not is_landscape:
+            # hide game, show warning, forces user to rotate screen/device
+            for item in [self.stock, self.waste] + self.foundations + self.tableau + self.cards:
+                item.visible = False
+            
+            self.rotate_warning.visible = True
+            self.rotate_warning.width = page_width
+            self.rotate_warning.left = 0
+            self.rotate_warning.top = page_height / 3
+            
+            # if possible we hide the app bar
+            if self.page.appbar:
+                self.page.appbar.visible = False
+                
+            self.update()
+
+        else:
+            # landscape mode, we run everything else
+            for item in [self.stock, self.waste] + self.foundations + self.tableau + self.cards:
+                item.visible = True
+                
+            self.rotate_warning.visible = False
+            
+            # shows appbar
+            if self.page.appbar:
+                self.page.appbar.visible = True
+
+            spacing = 6
+            margin = 15
+            zone_gap = 35 
+            
+            # 1 left col + 7 center cols + 2 right cols = 10 cols total
+            available_width = page_width - (2 * margin) - (7 * spacing) - (2 * zone_gap)
+            c_width = available_width / 10
+            
+            # scale off constraints so cards wont bleed off the bottom
+            available_height = page_height - 60 - (2 * margin)
+            max_height_by_h = available_height / 3.1 
+            max_width_by_h = max_height_by_h / 1.42
+            
+            # card size bounded to avoid extremes
+            c_width = max(35, min(140, min(c_width, max_width_by_h)))
+            c_height = c_width * 1.42 
+            
+            self.card_offset = c_height * 0.15 
+            self.drop_proximity = c_width * 0.5 
+            
+            # center the whole board horizontally
+            total_width = (10 * c_width) + (7 * spacing) + (2 * zone_gap)
+            start_x = max(margin, (page_width - total_width) / 2) 
+
+            # left zone prep (stock & waste)
+            self.stock.left = start_x
+            self.stock.top = margin
+            self.waste.left = start_x
+            self.waste.top = margin + c_height + spacing
+
+            # center zone prep (tableau)
+            t_start_x = start_x + c_width + zone_gap 
+            tableau_top = margin 
+            for i, slot in enumerate(self.tableau):
+                slot.left = t_start_x + i * (c_width + spacing)
+                slot.top = tableau_top
+
+            # right one (Foundations 2x2 grid)
+            f_start_x = t_start_x + (7 * c_width) + (6 * spacing) + zone_gap 
+            
+            self.foundations[0].left = f_start_x
+            self.foundations[0].top = margin
+            
+            self.foundations[1].left = f_start_x + c_width + spacing
+            self.foundations[1].top = margin
+            
+            self.foundations[2].left = f_start_x
+            self.foundations[2].top = margin + c_height + spacing
+            
+            self.foundations[3].left = f_start_x + c_width + spacing
+            self.foundations[3].top = margin + c_height + spacing
+
+            # apply calculated sizes to all slots
+            for slot in [self.stock, self.waste] + self.foundations + self.tableau:
+                slot.width = c_width
+                slot.height = c_height
+
+            # apply sizes and positions to all cards
+            for card in self.cards:
+                card.content.width = c_width
+                card.content.height = c_height
+                if card.slot:
+                    if card.slot in self.tableau:
+                        card.top = card.slot.top + card.slot.pile.index(card) * self.card_offset
+                    else:
+                        card.top = card.slot.top
+                    card.left = card.slot.left
+                
+            self.update()
 
     def create_card_deck(self):
         """inits our card deck with the 52 cards, from 4 suits and 13 ranks"""
@@ -85,7 +201,7 @@ class Solitaire(ft.Stack):
 
     def create_slots(self):
         """creates the slots that will hold the cards, pile to draw from, waste pile, foundations and tableau(playing area)"""
-        self.stock = Slot(solitaire=self, top=0, left=0, border=ft.border.all(1))
+        self.stock = Slot(solitaire=self, top=0, left=0, border=ft.Border.all(1))
 
         self.waste = Slot(solitaire=self, top=0, left=100, border=None)
 
@@ -93,7 +209,7 @@ class Solitaire(ft.Stack):
         x = 300
         for i in range(4):
             self.foundations.append(
-                Slot(solitaire=self, top=0, left=x, border=ft.border.all(1, "outline"))
+                Slot(solitaire=self, top=0, left=x, border=ft.Border.all(1, "outline"))
             )
             x += 100
 
@@ -107,6 +223,7 @@ class Solitaire(ft.Stack):
         self.controls.append(self.waste)
         self.controls.extend(self.foundations)
         self.controls.extend(self.tableau)
+        self.controls.append(self.rotate_warning)
         self.update()
 
     def deal_cards(self):
@@ -197,6 +314,7 @@ class Solitaire(ft.Stack):
         self.deal_cards()
         
         # updates interface
+        self.handle_resize(None)
         self.update()
 
     def undo_move(self, e=None):
@@ -256,7 +374,7 @@ class Solitaire(ft.Stack):
                 card.move_on_top()
                 card.top = random.randint(0, SOLITAIRE_HEIGHT - 100)
                 card.left = random.randint(0, SOLITAIRE_WIDTH - 70)
-                self.update()
+                card.update()
                 await asyncio.sleep(0.05)
         
         await asyncio.sleep(0.5)
@@ -322,7 +440,7 @@ class Solitaire(ft.Stack):
         if self.current_save_name:
             dlg = ft.AlertDialog(
                 title=ft.Text("Save Options"),
-                content=ft.Text(f"You are currently playing on '{self.current_save_name}'.\nWould you like to overwrite it or create a brand new save file?")
+                content=ft.Text(f"You are currently playing on '{self.current_save_name}'.\nWould you like to overwrite it or create a brand new save file?"),
             )
             
             async def close_dialog(e=None):
@@ -409,7 +527,7 @@ class Solitaire(ft.Stack):
                 target_slot.pile.append(card)
                 
                 if target_slot in self.tableau:
-                    card.top = target_slot.top + target_slot.pile.index(card) * CARD_OFFSET
+                    card.top = target_slot.top + target_slot.pile.index(card) * self.card_offset
                 else:
                     card.top = target_slot.top
                 card.left = target_slot.left
@@ -432,7 +550,7 @@ class Solitaire(ft.Stack):
         
         dialog = ft.AlertDialog(
             title=ft.Text(f"Saved Games ({len(keys) if keys else 0})"),
-            content=ft.Container(width=400, height=300, content=saves_list)
+            content=ft.Container(width=400, height=300, content=saves_list),
         )
         
         async def close_dialog(e=None):
@@ -463,21 +581,32 @@ class Solitaire(ft.Stack):
                 return handler
             # build a row for each save file
             for key in sorted(keys, reverse=True): # shows newest saves at the top
+                try:
+                    parts = key.split("_")
+                    save_id = parts[2]
+                    date_str = f"{parts[4]}/{parts[5]}/{parts[3]}" # MM/DD/YYYY
+                    time_str = parts[6]
+                    display_text = f"Save #{save_id}\n{date_str} {time_str}"
+                except:
+                    display_text = key # fallback if string format is unexpected
+                
                 row = ft.Row(
                     controls=[
-                        ft.Text(key, expand=True),
+                        ft.Text(display_text, expand=True, size=13, weight="bold"),
                         ft.IconButton(
                             icon=ft.Icons.DOWNLOAD,
-                            on_click=create_load_handler(key)
-                            ),
-                    ]
+                            on_click=create_load_handler(key),
+                            icon_color=ft.Colors.BLUE
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN
                 )
                 
                 row.controls.append(
                     ft.IconButton(
                         icon=ft.Icons.DELETE,
-                        icon_color="RED",
-                        on_click=create_delete_handler(key,row)
+                        icon_color=ft.Colors.RED,
+                        on_click=create_delete_handler(key, row)
                     )
                 )
                 
@@ -517,7 +646,10 @@ class Solitaire(ft.Stack):
             
         dlg.actions = [ft.TextButton("Close", on_click=close_dialog)]
         
-        options_row = ft.Row(alignment=ft.MainAxisAlignment.CENTER, spacing=15)
+        options_row = ft.Row(
+            alignment=ft.MainAxisAlignment.CENTER,
+            spacing=15,
+            scroll=ft.ScrollMode.AUTO)
         
         def create_select_handler(selected_deck):
             async def handler(e):
@@ -545,7 +677,12 @@ class Solitaire(ft.Stack):
                 )
             )
         
-        dlg.content = options_row
+        dlg.content = ft.Container(
+            content=options_row,
+            width=300,
+            padding=10
+        )
+        
         self.page.overlay.append(dlg)
         dlg.open = True
         self.page.update()
