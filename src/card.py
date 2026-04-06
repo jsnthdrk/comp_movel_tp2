@@ -2,15 +2,13 @@ import flet as ft
 
 CARD_WIDTH = 70
 CARD_HEIGHT = 100
-DROP_PROXIMITY = 30
-CARD_OFFSET = 20
 
 
 class Card(ft.GestureDetector):
     def __init__(self, solitaire, suite, rank):
         super().__init__(key=f"{suite.name}_{rank.name}")
         self.mouse_cursor = ft.MouseCursor.MOVE
-        self.drag_interval = 30
+        self.drag_interval = 100
         self.on_pan_start = self.start_drag
         self.on_pan_update = self.drag
         self.on_pan_end = self.drop
@@ -35,13 +33,13 @@ class Card(ft.GestureDetector):
         """Reveals card"""
         self.face_up = True
         self.content.content.src = f"/images/{self.rank.name}_{self.suite.name}.svg"
-        self.solitaire.update()
+        self.content.update()
 
     def turn_face_down(self):
         """Hides card"""
         self.face_up = False
         self.content.content.src = self.solitaire.current_card_back
-        self.solitaire.update()
+        self.content.update()
 
     def move_on_top(self):
         """Brings draggable card pile to the top of the stack"""
@@ -56,7 +54,7 @@ class Card(ft.GestureDetector):
         self.move_on_top()
         for card in self.draggable_pile:
             if card.slot in self.solitaire.tableau:
-                card.top = card.slot.top + card.slot.pile.index(card) * CARD_OFFSET
+                card.top = card.slot.top + card.slot.pile.index(card) * self.solitaire.card_offset
             else:
                 card.top = card.slot.top
             card.left = card.slot.left
@@ -67,7 +65,7 @@ class Card(ft.GestureDetector):
         self.move_on_top()      
         for card in self.draggable_pile:
             if slot in self.solitaire.tableau:
-                card.top = slot.top + len(slot.pile) * CARD_OFFSET
+                card.top = slot.top + len(slot.pile) * self.solitaire.card_offset
             else:
                 card.top = slot.top
             card.left = slot.left
@@ -117,9 +115,9 @@ class Card(ft.GestureDetector):
         if self.face_up:
             for slot in self.solitaire.tableau:
                 if (
-                    abs(self.top - (slot.top + len(slot.pile) * CARD_OFFSET))
-                    < DROP_PROXIMITY
-                    and abs(self.left - slot.left) < DROP_PROXIMITY
+                    abs(self.top - (slot.top + len(slot.pile) * self.solitaire.card_offset))
+                    < self.solitaire.drop_proximity
+                    and abs(self.left - slot.left) < self.solitaire.drop_proximity
                 ) and self.solitaire.check_tableau_rules(self, slot):
                     points = 5 if self.slot == self.solitaire.waste else 0 # +5 points from moving from waste to tableau
                     self.solitaire.update_score(points)
@@ -138,8 +136,8 @@ class Card(ft.GestureDetector):
             if len(self.draggable_pile) == 1:
                 for slot in self.solitaire.foundations:
                     if (
-                        abs(self.top - slot.top) < DROP_PROXIMITY
-                        and abs(self.left - slot.left) < DROP_PROXIMITY
+                        abs(self.top - slot.top) < self.solitaire.drop_proximity
+                        and abs(self.left - slot.left) < self.solitaire.drop_proximity
                     ) and self.solitaire.check_foundations_rules(self, slot):
                         points = 10 # +10 points for moving to foundation
                         self.solitaire.update_score(points)
